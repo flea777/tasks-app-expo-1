@@ -10,6 +10,7 @@ interface AuthState {
   loading: boolean;
   loadToken: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -27,6 +28,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { data } = await axios.post(`${baseURL}/auth/login`, { email, password });
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     set({ token: data.token });
+  },
+
+  register: async (name, email, password) => {
+    await axios.post(`${baseURL}/auth/signup`, { name, email, password });
+    // Só cria a conta — usuário deve fazer login separadamente
   },
 
   signup: async (name, email, password) => {
