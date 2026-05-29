@@ -1,296 +1,427 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView,
-  Platform, StatusBar as RNStatusBar, Image, Pressable, ActivityIndicator, Modal, Button,
+  Animated, Dimensions, Modal, Platform, Pressable, SafeAreaView,
+  StatusBar as RNStatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Checkbox from 'expo-checkbox';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import TaskList from '../../src/components/TaskList';
 import { addTask, deleteTask, getAllTasks, updateTask, TaskItem } from '../../src/utils/handle-api';
-import { globalStyles } from '../../src/styles/global';
-import AboutScreen from '../../src/components/AboutScreen';
+
+const { height: SCREEN_H } = Dimensions.get('window');
+
+const PRIORITY_COLORS: Record<string, string> = {
+  Baixa: '#00ff88',
+  Média: '#ff9800',
+  Alta:  '#ff4466',
+};
 
 export default function TasksScreen() {
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [text, setText] = useState('');
+  const [tasks,    setTasks]    = useState<TaskItem[]>([]);
+  const [text,     setText]     = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
-  const [taskId, setTaskId] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [logoError, setLogoError] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'completed' | 'pending'>('all');
+  const [taskId,   setTaskId]   = useState('');
+  const [loading,  setLoading]  = useState(true);
+  const [filter,   setFilter]   = useState<'all' | 'completed' | 'pending'>('all');
+  const [modalVisible,      setModalVisible]      = useState(false);
+  const [completed,         setCompleted]         = useState(false);
+  const [dueDate,           setDueDate]           = useState<Date | null>(null);
+  const [showDatePicker,    setShowDatePicker]    = useState(false);
+  const [priority,          setPriority]          = useState<'Baixa' | 'Média' | 'Alta'>('Baixa');
 
-  const [aboutModalVisible, setAboutModalVisible] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [completed, setCompleted] = useState(false);
-  const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [priority, setPriority] = useState<'Baixa' | 'Média' | 'Alta'>('Baixa');
+  // Animações
+  const scanY      = useRef(new Animated.Value(-4)).current;
+  const logoRotate = useRef(new Animated.Value(0)).current;
+  const logoGlow   = useRef(new Animated.Value(0.4)).current;
+  const modalScale = useRef(new Animated.Value(0.92)).current;
+  const modalOp    = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     getAllTasks(setTasks, setLoading);
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scanY, { toValue: SCREEN_H + 4, duration: 3000, useNativeDriver: true }),
+        Animated.delay(3000),
+        Animated.timing(scanY, { toValue: -4, duration: 0, useNativeDriver: true }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.timing(logoRotate, { toValue: 1, duration: 10000, useNativeDriver: true })
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(logoGlow, { toValue: 1,   duration: 1400, useNativeDriver: true }),
+        Animated.timing(logoGlow, { toValue: 0.3, duration: 1400, useNativeDriver: true }),
+      ])
+    ).start();
   }, []);
 
+  const openModal = () => {
+    setModalVisible(true);
+    Animated.parallel([
+      Animated.spring(modalScale, { toValue: 1, useNativeDriver: true, speed: 14 }),
+      Animated.timing(modalOp,    { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const closeModal = () => {
+    Animated.parallel([
+      Animated.timing(modalScale, { toValue: 0.92, duration: 160, useNativeDriver: true }),
+      Animated.timing(modalOp,    { toValue: 0,    duration: 160, useNativeDriver: true }),
+    ]).start(() => {
+      setModalVisible(false);
+      resetForm();
+    });
+  };
+
   const resetForm = () => {
-    setText('');
-    setCompleted(false);
-    setDueDate(null);
-    setPriority('Baixa');
-    setIsUpdating(false);
-    setTaskId('');
-    setModalVisible(false);
+    setText(''); setCompleted(false); setDueDate(null);
+    setPriority('Baixa'); setIsUpdating(false); setTaskId('');
   };
 
   const updateMode = (task: TaskItem) => {
-    setIsUpdating(true);
-    setTaskId(task._id);
-    setText(task.text);
+    setIsUpdating(true); setTaskId(task._id); setText(task.text);
     setCompleted(!!task.completed);
     setDueDate(task.dueDate ? new Date(task.dueDate) : null);
-    setModalVisible(true);
+    openModal();
   };
 
   const handleSave = () => {
     const formattedDate = dueDate ? dueDate.toISOString() : null;
-    if (isUpdating) {
-      updateTask(taskId, text, completed, formattedDate, setTasks, resetForm);
-    } else {
-      addTask(text, completed, formattedDate, setTasks, resetForm);
-    }
+    if (isUpdating) updateTask(taskId, text, completed, formattedDate, setTasks, closeModal);
+    else            addTask(text, completed, formattedDate, setTasks, closeModal);
   };
 
-  const onChangeDate = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate) setDueDate(selectedDate);
-  };
+  const spin = logoRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
+  const filtered = tasks.filter((t) => {
+    if (filter === 'completed') return t.completed;
+    if (filter === 'pending')   return !t.completed;
+    return true;
+  });
+
+  const pending   = tasks.filter((t) => !t.completed).length;
+  const completed_ = tasks.filter((t) =>  t.completed).length;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.headerContainer}>
-          {logoError ? (
-            <Text style={styles.header}>Gerenciador de Tarefas</Text>
-          ) : (
-            <Image
-              source={require('../../assets/task-app-banner.png')}
-              style={styles.logo}
-              onError={() => setLogoError(true)}
-            />
-          )}
-          {!logoError && <Text style={styles.header}>Tarefas</Text>}
+    <SafeAreaView style={s.safe}>
+      <StatusBar style="light" />
+
+      {/* Scan line */}
+      <Animated.View style={[s.scanLine, { transform: [{ translateY: scanY }] }]} pointerEvents="none" />
+
+      {/* Brilho de fundo */}
+      <View style={s.glowBg} />
+
+      <View style={s.container}>
+
+        {/* Header */}
+        <View style={s.header}>
+          <Animated.Text style={[s.logoIcon, { transform: [{ rotate: spin }], opacity: logoGlow }]}>
+            ⬡
+          </Animated.Text>
+          <Text style={s.title}>TASK OS</Text>
+          <Text style={s.subtitle}>Gerenciador de Tarefas</Text>
         </View>
 
-        <View style={styles.counterContainer}>
-          <Text style={styles.counterText}>Total de Tarefas: {tasks.length}</Text>
+        {/* Stats */}
+        <View style={s.statsRow}>
+          <View style={s.statCard}>
+            <Text style={s.statNum}>{tasks.length}</Text>
+            <Text style={s.statLabel}>TOTAL</Text>
+          </View>
+          <View style={[s.statCard, s.statCardAccent]}>
+            <Text style={[s.statNum, { color: '#00ff88' }]}>{completed_}</Text>
+            <Text style={s.statLabel}>CONCLUÍDAS</Text>
+          </View>
+          <View style={s.statCard}>
+            <Text style={[s.statNum, { color: '#ff9800' }]}>{pending}</Text>
+            <Text style={s.statLabel}>PENDENTES</Text>
+          </View>
         </View>
 
-        <View style={styles.filterContainer}>
-          {(['all', 'completed', 'pending'] as const).map((f) => (
+        {/* Filtros */}
+        <View style={s.filterRow}>
+          {([
+            { key: 'all',       label: 'TODAS' },
+            { key: 'completed', label: 'CONCLUÍDAS' },
+            { key: 'pending',   label: 'PENDENTES' },
+          ] as const).map(({ key, label }) => (
             <TouchableOpacity
-              key={f}
-              style={[styles.filterButton, filter === f ? styles.filterButtonActive : styles.filterButtonInactive]}
-              onPress={() => setFilter(f)}
+              key={key}
+              style={[s.filterBtn, filter === key && s.filterBtnActive]}
+              onPress={() => setFilter(key)}
             >
-              <Text style={filter === f ? styles.filterTextActive : styles.filterTextInactive}>
-                {f === 'all' ? 'Todas' : f === 'completed' ? 'Concluídas' : 'Pendentes'}
-              </Text>
+              <Text style={[s.filterText, filter === key && s.filterTextActive]}>{label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={styles.actionButtonsContainer}>
+        {/* Ações */}
+        <View style={s.actionsRow}>
           <Pressable
-            style={({ pressed }) => [styles.actionButton, styles.actionButtonAdd, pressed && styles.actionButtonAddPressed]}
-            onPress={() => setModalVisible(true)}
+            style={({ pressed }) => [s.btn, s.btnAdd, pressed && s.btnPressed]}
+            onPress={openModal}
           >
-            <Text style={styles.actionButtonText}>Nova Tarefa</Text>
+            <Text style={s.btnText}>＋ NOVA TAREFA</Text>
           </Pressable>
           <Pressable
-            style={({ pressed }) => [styles.actionButton, styles.deleteButton, pressed && styles.deleteButtonPressed]}
+            style={({ pressed }) => [s.btn, s.btnDelete, pressed && s.btnPressed]}
             onPress={() => setTasks([])}
           >
-            <Text style={styles.actionButtonText}>Excluir todas</Text>
+            <Text style={s.btnText}>⌫ EXCLUIR TODAS</Text>
           </Pressable>
         </View>
 
-        <View style={styles.aboutButtonContainer}>
-          <Button title="Sobre o App" onPress={() => setAboutModalVisible(true)} />
-        </View>
-
+        {/* Lista */}
         <TaskList
-          tasks={tasks.filter((t) => {
-            if (filter === 'completed') return t.completed;
-            if (filter === 'pending') return !t.completed;
-            return true;
-          })}
+          tasks={filtered}
           onUpdate={updateMode}
           onDelete={(id) => deleteTask(id, setTasks)}
         />
 
+        {/* Loading overlay */}
         {loading && (
-          <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#000" />
+          <View style={s.loadingOverlay}>
+            <View style={s.loadingCard}>
+              <Animated.Text style={[s.loadingIcon, { transform: [{ rotate: spin }] }]}>⬡</Animated.Text>
+              <Text style={s.loadingText}>CARREGANDO...</Text>
+            </View>
           </View>
         )}
       </View>
 
-      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={resetForm}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{isUpdating ? 'Editar Tarefa' : 'Nova Tarefa'}</Text>
+      {/* Modal nova/editar tarefa */}
+      <Modal visible={modalVisible} transparent animationType="none" onRequestClose={closeModal}>
+        <View style={s.modalOverlay}>
+          <Animated.View style={[s.modalCard, { transform: [{ scale: modalScale }], opacity: modalOp }]}>
 
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>{isUpdating ? 'EDITAR TAREFA' : 'NOVA TAREFA'}</Text>
+              <TouchableOpacity onPress={closeModal}>
+                <Text style={s.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={s.modalLabel}>NOME</Text>
             <TextInput
-              style={styles.modalInput}
-              placeholder="Nome da tarefa..."
+              style={[s.modalInput, !!text && s.modalInputActive]}
+              placeholder="Descreva a tarefa..."
+              placeholderTextColor="#252540"
               value={text}
               maxLength={50}
               onChangeText={setText}
             />
 
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>Data limite:</Text>
-              {Platform.OS === 'web' ? (
-                // @ts-ignore
-                <input
-                  type="date"
-                  value={dueDate ? dueDate.toISOString().split('T')[0] : ''}
-                  onChange={(e: any) => {
-                    const val = e.target.value;
-                    if (val) {
-                      const parts = val.split('-');
-                      setDueDate(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
-                    } else {
-                      setDueDate(null);
-                    }
-                  }}
-                  style={{ padding: 8, borderRadius: 4, border: '1px solid #ccc', flex: 1, marginLeft: 16 }}
-                />
-              ) : (
-                <View style={{ flex: 1, marginLeft: 16, alignItems: 'flex-start' }}>
-                  <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.datePickerBtn}>
-                    <Text>{dueDate ? dueDate.toLocaleDateString() : 'Selecionar Data'}</Text>
+            <Text style={s.modalLabel}>DATA LIMITE</Text>
+            {Platform.OS === 'web' ? (
+              // @ts-ignore
+              <input
+                type="date"
+                value={dueDate ? dueDate.toISOString().split('T')[0] : ''}
+                onChange={(e: any) => {
+                  const val = e.target.value;
+                  if (val) {
+                    const [y, m, d] = val.split('-');
+                    setDueDate(new Date(+y, +m - 1, +d));
+                  } else setDueDate(null);
+                }}
+                style={{
+                  backgroundColor: '#08081a', border: '1px solid #1a1a35', borderRadius: 8,
+                  padding: '10px 14px', color: '#e0e0ff', fontSize: 14,
+                  marginBottom: 14, width: '100%', boxSizing: 'border-box',
+                }}
+              />
+            ) : (
+              <View style={s.dateRow}>
+                <TouchableOpacity onPress={() => setShowDatePicker(true)} style={s.dateBtn}>
+                  <Text style={s.dateBtnText}>{dueDate ? dueDate.toLocaleDateString() : 'Selecionar  ▾'}</Text>
+                </TouchableOpacity>
+                {dueDate && (
+                  <TouchableOpacity onPress={() => setDueDate(null)} style={s.dateClear}>
+                    <Text style={s.dateClearText}>✕</Text>
                   </TouchableOpacity>
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={dueDate || new Date()}
-                      mode="date"
-                      display="default"
-                      onChange={onChangeDate}
-                    />
-                  )}
-                </View>
-              )}
-            </View>
-
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>Concluída:</Text>
-              <View style={styles.checkboxContainer}>
-                <Checkbox value={completed} onValueChange={setCompleted} color={completed ? '#000' : undefined} />
+                )}
               </View>
+            )}
+            {showDatePicker && (
+              <DateTimePicker
+                value={dueDate || new Date()}
+                mode="date"
+                display="default"
+                onChange={(_, d) => { setShowDatePicker(false); if (d) setDueDate(d); }}
+              />
+            )}
+
+            <View style={s.rowField}>
+              <Text style={s.modalLabel}>CONCLUÍDA</Text>
+              <Checkbox
+                value={completed}
+                onValueChange={setCompleted}
+                color={completed ? '#00d4ff' : undefined}
+                style={{ marginLeft: 12 }}
+              />
             </View>
 
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldLabel}>Prioridade:</Text>
-              <View style={styles.priorityContainer}>
-                {(['Baixa', 'Média', 'Alta'] as const).map((p) => (
-                  <TouchableOpacity
-                    key={p}
-                    style={[
-                      styles.priorityButton,
-                      priority === p && {
-                        backgroundColor: p === 'Baixa' ? '#4caf50' : p === 'Média' ? '#ff9800' : '#f44336',
-                        borderColor: p === 'Baixa' ? '#4caf50' : p === 'Média' ? '#ff9800' : '#f44336',
-                      },
-                    ]}
-                    onPress={() => setPriority(p)}
-                  >
-                    <Text style={[styles.priorityText, priority === p && styles.priorityTextActive]}>{p}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+            <Text style={s.modalLabel}>PRIORIDADE</Text>
+            <View style={s.priorityRow}>
+              {(['Baixa', 'Média', 'Alta'] as const).map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  style={[s.priorityBtn, priority === p && { borderColor: PRIORITY_COLORS[p], backgroundColor: `${PRIORITY_COLORS[p]}18` }]}
+                  onPress={() => setPriority(p)}
+                >
+                  <Text style={[s.priorityText, priority === p && { color: PRIORITY_COLORS[p], fontWeight: '700' }]}>{p}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={resetForm}>
-                <Text style={styles.modalCancelText}>Cancelar</Text>
+            <View style={s.modalActions}>
+              <TouchableOpacity style={s.cancelBtn} onPress={closeModal}>
+                <Text style={s.cancelText}>CANCELAR</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalSaveBtn, !text.trim() && styles.modalSaveBtnDisabled]}
+                style={[s.saveBtn, !text.trim() && s.saveBtnDisabled]}
                 onPress={handleSave}
                 disabled={!text.trim()}
               >
-                <Text style={styles.modalSaveText}>Salvar</Text>
+                <Text style={s.saveText}>SALVAR</Text>
               </TouchableOpacity>
             </View>
-          </View>
+
+          </Animated.View>
         </View>
       </Modal>
-
-      <Modal visible={aboutModalVisible} animationType="slide" onRequestClose={() => setAboutModalVisible(false)}>
-        <AboutScreen onClose={() => setAboutModalVisible(false)} />
-      </Modal>
-
-      <StatusBar style="auto" />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: globalStyles.backgroundColor,
+const s = StyleSheet.create({
+  safe: {
+    flex: 1, backgroundColor: '#050510',
     paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
-  container: { flex: 1, maxWidth: 600, width: '100%', alignSelf: 'center', paddingHorizontal: 16 },
-  headerContainer: { alignItems: 'center', marginTop: 16 },
-  logo: { width: 60, height: 60, marginBottom: 8 },
-  header: { textAlign: 'center', fontSize: 24, fontWeight: 'bold' },
-  counterContainer: { marginTop: 8, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  counterText: { fontSize: globalStyles.bodyFontSize, color: '#666' },
-  filterContainer: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 12 },
-  filterButton: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1 },
-  filterButtonActive: { backgroundColor: '#000', borderColor: '#000' },
-  filterButtonInactive: { backgroundColor: 'transparent', borderColor: '#000' },
-  filterTextActive: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  filterTextInactive: { color: '#000', fontSize: 14 },
-  actionButtonsContainer: { flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 16 },
-  aboutButtonContainer: { marginTop: 16, alignItems: 'center' },
-  actionButton: {
-    paddingVertical: 14, paddingHorizontal: 20, borderRadius: 8, justifyContent: 'center',
-    alignItems: 'center', elevation: 3, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25, shadowRadius: 4, flex: 1,
+  glowBg: {
+    position: 'absolute', top: -60, left: '50%', marginLeft: -180,
+    width: 360, height: 360, borderRadius: 180,
+    backgroundColor: 'rgba(0, 212, 255, 0.04)',
   },
-  actionButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14, letterSpacing: 0.5 },
-  actionButtonAdd: { backgroundColor: globalStyles.primaryColor, shadowColor: globalStyles.primaryColor },
-  actionButtonAddPressed: { backgroundColor: '#333', transform: [{ scale: 0.98 }], elevation: 1, shadowOpacity: 0.1 },
-  deleteButton: { backgroundColor: '#ff4d4d', shadowColor: '#ff0000' },
-  deleteButtonPressed: { backgroundColor: '#d9363e', transform: [{ scale: 0.98 }], elevation: 1, shadowOpacity: 0.1 },
-  loaderContainer: {
-    position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
-    justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.7)', zIndex: 10,
+  scanLine: {
+    position: 'absolute', left: 0, right: 0, height: 2,
+    backgroundColor: 'rgba(0, 212, 255, 0.1)', zIndex: 999,
   },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: {
-    width: '90%', maxWidth: 400, backgroundColor: '#fff', borderRadius: 8, padding: 24,
-    elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4,
+  container: {
+    flex: 1, maxWidth: 620, width: '100%', alignSelf: 'center', paddingHorizontal: 18,
   },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
+  header: { alignItems: 'center', paddingTop: 16, marginBottom: 16 },
+  logoIcon: {
+    fontSize: 28, color: '#00d4ff', marginBottom: 4,
+    textShadowColor: '#00d4ff', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 16,
+  },
+  title: {
+    fontSize: 22, fontWeight: '900', color: '#00d4ff', letterSpacing: 8,
+    textShadowColor: '#00d4ff', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10,
+  },
+  subtitle: { color: '#333355', fontSize: 9, letterSpacing: 3, marginTop: 2 },
+
+  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  statCard: {
+    flex: 1, backgroundColor: '#0a0a1a', borderRadius: 10,
+    borderWidth: 1, borderColor: '#1a1a35', paddingVertical: 10, alignItems: 'center',
+  },
+  statCardAccent: { borderColor: '#00ff8820' },
+  statNum:   { fontSize: 22, fontWeight: '900', color: '#00d4ff' },
+  statLabel: { fontSize: 8, fontWeight: '700', color: '#333355', letterSpacing: 2, marginTop: 2 },
+
+  filterRow: { flexDirection: 'row', gap: 6, marginBottom: 12 },
+  filterBtn: {
+    flex: 1, paddingVertical: 7, borderRadius: 8,
+    borderWidth: 1, borderColor: '#1a1a35', alignItems: 'center',
+    backgroundColor: '#0a0a1a',
+  },
+  filterBtnActive: { backgroundColor: '#00d4ff15', borderColor: '#00d4ff' },
+  filterText:      { color: '#333355', fontSize: 9, fontWeight: '700', letterSpacing: 2 },
+  filterTextActive:{ color: '#00d4ff', fontSize: 9, fontWeight: '700', letterSpacing: 2 },
+
+  actionsRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
+  btn: {
+    flex: 1, paddingVertical: 13, borderRadius: 8, alignItems: 'center',
+    overflow: 'hidden',
+  },
+  btnAdd: {
+    backgroundColor: '#00d4ff', shadowColor: '#00d4ff',
+    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6,
+  },
+  btnDelete: {
+    backgroundColor: 'rgba(255,68,102,0.1)', borderWidth: 1, borderColor: '#ff4466',
+    shadowColor: '#ff4466', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 8,
+  },
+  btnPressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
+  btnText: { fontWeight: '900', fontSize: 11, letterSpacing: 2, color: '#000' },
+
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(5,5,16,0.85)',
+    justifyContent: 'center', alignItems: 'center', zIndex: 100,
+  },
+  loadingCard: { alignItems: 'center' },
+  loadingIcon: {
+    fontSize: 48, color: '#00d4ff', marginBottom: 12,
+    textShadowColor: '#00d4ff', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 20,
+  },
+  loadingText: { color: '#333355', fontSize: 11, letterSpacing: 4 },
+
+  // Modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(5,5,16,0.88)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  modalCard: {
+    width: '92%', maxWidth: 420, backgroundColor: '#0a0a1a',
+    borderRadius: 14, borderWidth: 1, borderColor: '#1a1a35', padding: 22,
+    shadowColor: '#00d4ff', shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.15, shadowRadius: 24, elevation: 10,
+  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  modalTitle: { color: '#00d4ff', fontSize: 12, fontWeight: '900', letterSpacing: 4 },
+  modalClose: { color: '#333355', fontSize: 18, fontWeight: '700' },
+  modalLabel: { color: '#333355', fontSize: 9, fontWeight: '700', letterSpacing: 3, marginBottom: 6 },
   modalInput: {
-    borderWidth: 1, borderColor: '#ccc', borderRadius: 4,
-    paddingVertical: 10, paddingHorizontal: 12, fontSize: 16, marginBottom: 16,
+    backgroundColor: '#08081a', borderWidth: 1, borderColor: '#1a1a35',
+    borderRadius: 8, paddingVertical: 11, paddingHorizontal: 14,
+    fontSize: 14, color: '#e0e0ff', marginBottom: 14,
   },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  fieldLabel: { fontSize: 16, fontWeight: 'bold' },
-  checkboxContainer: { marginLeft: 16 },
-  priorityContainer: { flexDirection: 'row', flex: 1, marginLeft: 16, gap: 8, flexWrap: 'wrap' },
-  priorityButton: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 4, borderWidth: 1, borderColor: '#ccc' },
-  priorityText: { color: '#333' },
-  priorityTextActive: { color: '#fff', fontWeight: 'bold' },
-  datePickerBtn: { borderWidth: 1, borderColor: '#ccc', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 4 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8 },
-  modalCancelBtn: { paddingVertical: 10, paddingHorizontal: 16 },
-  modalCancelText: { color: '#666', fontSize: 16, fontWeight: 'bold' },
-  modalSaveBtn: { backgroundColor: '#000', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 4 },
-  modalSaveBtnDisabled: { backgroundColor: '#ccc' },
-  modalSaveText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  modalInputActive: { borderColor: '#00d4ff' },
+  dateRow:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  dateBtn: {
+    flex: 1, backgroundColor: '#08081a', borderWidth: 1, borderColor: '#1a1a35',
+    borderRadius: 8, paddingVertical: 11, paddingHorizontal: 14,
+  },
+  dateBtnText: { color: '#e0e0ff', fontSize: 14 },
+  dateClear: { padding: 10 },
+  dateClearText: { color: '#ff4466', fontSize: 16 },
+  rowField: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  priorityRow: { flexDirection: 'row', gap: 8, marginBottom: 18 },
+  priorityBtn: {
+    flex: 1, paddingVertical: 8, borderRadius: 8,
+    borderWidth: 1, borderColor: '#1a1a35', alignItems: 'center',
+  },
+  priorityText: { color: '#333355', fontSize: 12 },
+  modalActions: { flexDirection: 'row', gap: 10 },
+  cancelBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 8,
+    borderWidth: 1, borderColor: '#1a1a35', alignItems: 'center',
+  },
+  cancelText: { color: '#333355', fontWeight: '700', fontSize: 12, letterSpacing: 2 },
+  saveBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 8,
+    backgroundColor: '#00d4ff', alignItems: 'center',
+    shadowColor: '#00d4ff', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 10,
+  },
+  saveBtnDisabled: { backgroundColor: '#0a1a1f', shadowOpacity: 0 },
+  saveText: { color: '#000', fontWeight: '900', fontSize: 12, letterSpacing: 3 },
 });

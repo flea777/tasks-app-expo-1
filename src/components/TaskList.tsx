@@ -3,75 +3,74 @@ import { SectionList, StyleSheet, View, Text } from 'react-native';
 import TaskItem from './TaskItem';
 import { TaskItem as TaskType } from '../utils/handle-api';
 
-// TODO (Zustand): Remova as props tasks, onUpdate e onDelete daqui, elas não serão mais necessárias
 interface TaskListProps {
   tasks: TaskType[];
   onUpdate: (task: TaskType) => void;
   onDelete: (id: string) => void;
 }
 
-// TODO (Zustand): Importe o useTaskStore e pegue as tasks diretamente da store
 const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdate, onDelete }) => {
   const sections = useMemo(() => {
-    const completedTasks = tasks.filter((task) => task.completed);
-    const pendingTasks = tasks.filter((task) => !task.completed);
-
+    const completed = tasks.filter((t) => t.completed);
+    const pending   = tasks.filter((t) => !t.completed);
     return [
-      { title: '✅ Concluídas', data: completedTasks },
-      { title: '📋 Pendentes', data: pendingTasks },
+      { title: 'PENDENTES',  accent: '#ff9800', data: pending   },
+      { title: 'CONCLUÍDAS', accent: '#00ff88', data: completed },
     ];
   }, [tasks]);
 
   return (
-    <View style={styles.listContainer}>
+    <View style={s.wrap}>
       <SectionList
         sections={sections}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={styles.listContent}
-        renderSectionHeader={({ section: { title } }) => (
-          <Text style={styles.sectionHeader}>{title}</Text>
-        )}
+        keyExtractor={(item) => String(item._id)}
+        contentContainerStyle={s.listContent}
+        stickySectionHeadersEnabled={false}
+        renderSectionHeader={({ section }) =>
+          section.data.length === 0 ? null : (
+            <View style={s.sectionHeader}>
+              <View style={[s.sectionDot, { backgroundColor: section.accent }]} />
+              <Text style={[s.sectionTitle, { color: section.accent }]}>{section.title}</Text>
+              <View style={s.sectionLine} />
+              <Text style={s.sectionCount}>{section.data.length}</Text>
+            </View>
+          )
+        }
+        renderSectionFooter={({ section }) =>
+          section.data.length === 0 ? (
+            <View style={s.emptySection}>
+              <Text style={s.emptyText}>Nenhuma tarefa aqui.</Text>
+            </View>
+          ) : null
+        }
         renderItem={({ item }) => (
-          
           <TaskItem
             task={item}
             updateMode={() => onUpdate(item)}
             deleteTask={() => onDelete(item._id)}
           />
         )}
-        renderSectionFooter={({ section }) => 
-          section.data.length === 0 ? (
-            <Text style={styles.emptySectionText}>Nenhuma tarefa nesta categoria.</Text>
-          ) : null
-        }
       />
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  listContainer: {
-    flex: 1,
-    marginTop: 16,
-  },
-  listContent: {
-    paddingBottom: 24,
-  },
+const s = StyleSheet.create({
+  wrap: { flex: 1, marginTop: 8 },
+  listContent: { paddingBottom: 32 },
   sectionHeader: {
-    backgroundColor: '#f0f0f0',
-    fontWeight: 'bold',
-    padding: 12,
-    fontSize: 16,
-    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
     marginBottom: 8,
-    borderRadius: 4,
+    gap: 8,
   },
-  emptySectionText: {
-    padding: 16,
-    color: '#666',
-    fontStyle: 'italic',
-    textAlign: 'center',
-  }
+  sectionDot: { width: 6, height: 6, borderRadius: 3 },
+  sectionTitle: { fontSize: 9, fontWeight: '900', letterSpacing: 3 },
+  sectionLine: { flex: 1, height: 1, backgroundColor: '#1a1a35' },
+  sectionCount: { color: '#333355', fontSize: 10, fontWeight: '700' },
+  emptySection: { paddingVertical: 12, alignItems: 'center' },
+  emptyText: { color: '#252540', fontSize: 12, fontStyle: 'italic' },
 });
 
 export default TaskList;
