@@ -4,6 +4,10 @@
     "strict": true,
     "jsx": "react-native",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
   }
 }

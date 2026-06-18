@@ -1,6 +1,9 @@
+import '../global.css';
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Slot, useRouter, useSegments } from 'expo-router';
+import { GluestackUIProvider } from '@gluestack-ui/themed';
+import { config } from '@gluestack-ui/config';
 import { useAuthStore } from '../src/store/useAuthStore';
 
 function SplashScreen() {
@@ -52,9 +55,19 @@ export default function RootLayout() {
     }
   }, [token, loading, segments]);
 
-  if (loading) return <SplashScreen />;
+  if (loading) {
+    return (
+      <GluestackUIProvider config={config}>
+        <SplashScreen />
+      </GluestackUIProvider>
+    );
+  }
 
-  return <Slot />;
+  return (
+    <GluestackUIProvider config={config}>
+      <Slot />
+    </GluestackUIProvider>
+  );
 }
 
 const styles = StyleSheet.create({

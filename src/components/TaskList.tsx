@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { SectionList, StyleSheet, View, Text } from 'react-native';
 import TaskItem from './TaskItem';
 import { TaskItem as TaskType } from '../utils/handle-api';
+import EmptyState from './EmptyState';
 
 interface TaskListProps {
   tasks: TaskType[];
@@ -18,6 +19,10 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onUpdate, onDelete }) => {
       { title: 'CONCLUÍDAS', accent: '#00ff88', data: completed },
     ];
   }, [tasks]);
+
+  if (tasks.length === 0) {
+    return <EmptyState />;
+  }
 
   return (
     <View style={s.wrap}>

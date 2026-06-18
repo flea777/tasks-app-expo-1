@@ -1,8 +1,25 @@
+import './global.css';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, Platform, StatusBar as RNStatusBar, Image, Pressable, ActivityIndicator, Modal, Button } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, Platform, StatusBar as RNStatusBar, Image, Pressable, ActivityIndicator, Modal, Button as RNButton } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Checkbox from 'expo-checkbox';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import {
+  AlertDialog,
+  AlertDialogBackdrop,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  Button,
+  ButtonText,
+  GluestackUIProvider,
+  Heading,
+  Input,
+  InputField,
+  Text as GluestackText,
+} from '@gluestack-ui/themed';
+import { config } from '@gluestack-ui/config';
 import TaskList from './src/components/TaskList';
 import { addTask, deleteTask, getAllTasks, updateTask, TaskItem } from './src/utils/handle-api';
 import { globalStyles } from './src/styles/global';
@@ -26,6 +43,7 @@ export default function App() {
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [priority, setPriority] = useState<'Baixa' | 'Média' | 'Alta'>('Baixa');
+  const [taskToDeleteId, setTaskToDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     // TODO (Zustand): Atualize esta chamada para usar a action correspondente da store
@@ -62,26 +80,41 @@ export default function App() {
     }
   };
 
+  const requestDeleteTask = (id: string) => {
+    setTaskToDeleteId(id);
+  };
+
+  const confirmDeleteTask = () => {
+    if (taskToDeleteId) {
+      deleteTask(taskToDeleteId, setTasks);
+      setTaskToDeleteId(null);
+    }
+  };
+
   const onChangeDate = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) setDueDate(selectedDate);
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.headerContainer}>
-          {logoError ? (
-            <Text style={styles.header}>Gerenciador de Tarefas</Text>
-          ) : (
-            <Image 
-              source={require('./assets/task-app-banner.png')} 
-              style={styles.logo} 
-              onError={() => setLogoError(true)}
-            />
-          )}
-          {!logoError && <Text style={styles.header}>Tarefas</Text>}
-        </View>
+    <GluestackUIProvider config={config}>
+      <SafeAreaView
+        className="flex-1 bg-zinc-100"
+        style={{ paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0 }}
+      >
+        <View style={styles.container}>
+          <View style={styles.headerContainer}>
+            {logoError ? (
+              <Text style={styles.header}>Gerenciador de Tarefas</Text>
+            ) : (
+              <Image
+                source={require('./assets/task-app-banner.png')}
+                style={styles.logo}
+                onError={() => setLogoError(true)}
+              />
+            )}
+            {!logoError && <Text style={styles.header}>Tarefas</Text>}
+          </View>
 
         <View style={styles.counterContainer}>
           <Text style={styles.counterText}>Total de Tarefas: {tasks.length}</Text>
@@ -109,16 +142,12 @@ export default function App() {
         </View>
 
         <View style={styles.actionButtonsContainer}>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.actionButton,
-              styles.actionButtonAdd,
-              pressed && styles.actionButtonAddPressed
-            ]}
+          <Button
+            style={[styles.actionButton, styles.actionButtonAdd]}
             onPress={() => setModalVisible(true)}
           >
-            <Text style={styles.actionButtonText}>Nova Tarefa</Text>
-          </Pressable>
+            <ButtonText style={styles.actionButtonText}>Nova Tarefa</ButtonText>
+          </Button>
 
           <Pressable 
             style={({ pressed }) => [
@@ -134,7 +163,7 @@ export default function App() {
         </View>
 
         <View style={styles.aboutButtonContainer}>
-          <Button title="Sobre o App" onPress={() => setAboutModalVisible(true)} />
+          <RNButton title="Sobre o App" onPress={() => setAboutModalVisible(true)} />
         </View>
 
         {/* TODO (Zustand): Remova as props tasks, onUpdate e onDelete após refatorar o TaskList */}
@@ -145,7 +174,7 @@ export default function App() {
             return true;
           })} 
           onUpdate={updateMode} 
-          onDelete={(id) => deleteTask(id, setTasks)} 
+          onDelete={requestDeleteTask}
         />
 
         {loading && (
@@ -165,13 +194,14 @@ export default function App() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{isUpdating ? "Editar Tarefa" : "Nova Tarefa"}</Text>
             
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Nome da tarefa..."
-              value={text}
-              maxLength={50}
-              onChangeText={setText}
-            />
+            <Input style={styles.modalInput}>
+              <InputField
+                placeholder="Nome da tarefa..."
+                value={text}
+                maxLength={50}
+                onChangeText={setText}
+              />
+            </Input>
 
             <View style={styles.fieldRow}>
               <Text style={styles.fieldLabel}>Data limite:</Text>
@@ -244,17 +274,44 @@ export default function App() {
               <TouchableOpacity style={styles.modalCancelBtn} onPress={resetForm}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.modalSaveBtn, !text.trim() && styles.modalSaveBtnDisabled]} 
+              <Button
+                style={[styles.modalSaveBtn, !text.trim() && styles.modalSaveBtnDisabled]}
                 onPress={handleSave}
-                disabled={!text.trim()}
+                isDisabled={!text.trim()}
               >
-                <Text style={styles.modalSaveText}>Salvar</Text>
-              </TouchableOpacity>
+                <ButtonText style={styles.modalSaveText}>Salvar</ButtonText>
+              </Button>
             </View>
           </View>
         </View>
       </Modal>
+
+      <AlertDialog isOpen={!!taskToDeleteId} onClose={() => setTaskToDeleteId(null)}>
+        <AlertDialogBackdrop />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <Heading size="md">Excluir tarefa</Heading>
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            <GluestackText>
+              Tem certeza que deseja excluir esta tarefa?
+            </GluestackText>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              action="secondary"
+              style={{ marginRight: 12 }}
+              onPress={() => setTaskToDeleteId(null)}
+            >
+              <ButtonText>Cancelar</ButtonText>
+            </Button>
+            <Button action="negative" onPress={confirmDeleteTask}>
+              <ButtonText>Excluir</ButtonText>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Modal
         visible={aboutModalVisible}
@@ -265,16 +322,12 @@ export default function App() {
       </Modal>
 
       <StatusBar style="auto" />
-    </SafeAreaView>
+      </SafeAreaView>
+    </GluestackUIProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: globalStyles.backgroundColor,
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
-  },
   container: {
     flex: 1,
     maxWidth: 600,

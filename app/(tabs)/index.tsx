@@ -1,11 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated, Dimensions, Modal, Platform, Pressable, SafeAreaView,
-  StatusBar as RNStatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  StatusBar as RNStatusBar, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Checkbox from 'expo-checkbox';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import {
+  AlertDialog,
+  AlertDialogBackdrop,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  Button,
+  ButtonText,
+  Heading,
+  Input,
+  InputField,
+  Text as GluestackText,
+} from '@gluestack-ui/themed';
 import TaskList from '../../src/components/TaskList';
 import { addTask, deleteTask, getAllTasks, updateTask, TaskItem } from '../../src/utils/handle-api';
 
@@ -66,6 +80,7 @@ export default function TasksScreen() {
   const [dueDate,           setDueDate]           = useState<Date | null>(null);
   const [showDatePicker,    setShowDatePicker]    = useState(false);
   const [priority,          setPriority]          = useState<'Baixa' | 'Média' | 'Alta'>('Baixa');
+  const [taskToDeleteId,    setTaskToDeleteId]    = useState<string | null>(null);
 
   const scanY      = useRef(new Animated.Value(-4)).current;
   const logoRotate = useRef(new Animated.Value(0)).current;
@@ -148,6 +163,17 @@ export default function TasksScreen() {
     else            addTask(text, completed, formattedDate, setTasks, closeModal);
   };
 
+  const requestDeleteTask = (id: string) => {
+    setTaskToDeleteId(id);
+  };
+
+  const confirmDeleteTask = () => {
+    if (taskToDeleteId) {
+      deleteTask(taskToDeleteId, setTasks);
+      setTaskToDeleteId(null);
+    }
+  };
+
   const spin = logoRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   const filtered = tasks.filter((t) => {
@@ -226,9 +252,9 @@ export default function TasksScreen() {
 
         {/* Ações */}
         <View style={s.actionsRow}>
-          <HoverBtn style={s.btnAdd} hoverColor="rgba(255,255,255,0.14)" onPress={openModal}>
-            <Text style={[s.btnText, { color: '#000' }]}>＋ NOVA TAREFA</Text>
-          </HoverBtn>
+          <Button style={s.btnAdd} onPress={openModal}>
+            <ButtonText style={[s.btnText, { color: '#000' }]}>＋ NOVA TAREFA</ButtonText>
+          </Button>
           <HoverBtn style={s.btnDelete} hoverColor="rgba(255,68,102,0.18)" onPress={() => setTasks([])}>
             <Text style={[s.btnText, { color: '#ff4466' }]}>⌫ EXCLUIR TODAS</Text>
           </HoverBtn>
@@ -238,7 +264,7 @@ export default function TasksScreen() {
         <TaskList
           tasks={filtered}
           onUpdate={updateMode}
-          onDelete={(id) => deleteTask(id, setTasks)}
+          onDelete={requestDeleteTask}
         />
 
         {/* Loading overlay */}
@@ -265,14 +291,15 @@ export default function TasksScreen() {
             </View>
 
             <Text style={s.modalLabel}>NOME</Text>
-            <TextInput
-              style={[s.modalInput, !!text && s.modalInputActive]}
-              placeholder="Descreva a tarefa..."
-              placeholderTextColor="#252540"
-              value={text}
-              maxLength={50}
-              onChangeText={setText}
-            />
+            <Input style={[s.modalInput, !!text && s.modalInputActive]}>
+              <InputField
+                placeholder="Descreva a tarefa..."
+                placeholderTextColor="#252540"
+                value={text}
+                maxLength={50}
+                onChangeText={setText}
+              />
+            </Input>
 
             <Text style={s.modalLabel}>DATA LIMITE</Text>
             {Platform.OS === 'web' ? (
@@ -351,19 +378,45 @@ export default function TasksScreen() {
               <HoverBtn style={s.cancelBtn} hoverColor="rgba(255,255,255,0.04)" onPress={closeModal}>
                 <Text style={s.cancelText}>CANCELAR</Text>
               </HoverBtn>
-              <HoverBtn
+              <Button
                 style={[s.saveBtn, !text.trim() && s.saveBtnDisabled]}
-                hoverColor="rgba(255,255,255,0.14)"
                 onPress={handleSave}
-                disabled={!text.trim()}
+                isDisabled={!text.trim()}
               >
-                <Text style={s.saveText}>SALVAR</Text>
-              </HoverBtn>
+                <ButtonText style={s.saveText}>SALVAR</ButtonText>
+              </Button>
             </View>
 
           </Animated.View>
         </View>
       </Modal>
+
+      <AlertDialog isOpen={!!taskToDeleteId} onClose={() => setTaskToDeleteId(null)}>
+        <AlertDialogBackdrop />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <Heading size="md">Excluir tarefa</Heading>
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            <GluestackText>
+              Tem certeza que deseja excluir esta tarefa?
+            </GluestackText>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              action="secondary"
+              style={{ marginRight: 12 }}
+              onPress={() => setTaskToDeleteId(null)}
+            >
+              <ButtonText>Cancelar</ButtonText>
+            </Button>
+            <Button action="negative" onPress={confirmDeleteTask}>
+              <ButtonText>Excluir</ButtonText>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SafeAreaView>
   );
 }
